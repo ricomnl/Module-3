@@ -131,7 +131,7 @@ def render_train_interface(
         )
         st_epoch_plot.plotly_chart(fig)
 
-        print(f"Epoch: {epoch}/{max_epochs}, loss: {total_loss}, correct: {correct}")
+        print(f"Epoch: {epoch}/{max_epochs}, loss: {total_loss}, correct: {correct}, time per epoch: {time_per_epoch:,.3f}s")
 
     if hasattr(train, "train") and st_train_button.button("Train Model"):
         train.train(dataset, learning_rate, max_epochs, log_fn)

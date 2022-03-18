@@ -24,3 +24,10 @@ to run these tests.
 This assignment requires the following files from the previous assignments.
 
         minitorch/tensor_data.py minitorch/tensor_functions.py minitorch/tensor_ops.py minitorch/operators.py minitorch/module.py minitorch/autodiff.py minitorch/scalar.py minitorch/module.py project/run_manual.py project/run_scalar.py project/run_tensor.py
+
+* Results
+
+Implementation | Backend | Hidden | Dataset | LR | Time per epoch
+--- | --- | --- | --- | --- | ---
+tensor | cpu | 2 | simple | 0.05 | 0.06s
+fast_tensor | cpu | 2 | simple | 0.05 | 0.22s
