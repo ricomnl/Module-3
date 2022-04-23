@@ -41,24 +41,24 @@ def tensor_map(fn):
     """
 
     def _map(out, out_shape, out_strides, in_storage, in_shape, in_strides):
-        strides_aligned = (out_shape == in_shape).all() and (
-            out_strides == in_strides
-        ).all()
-        out_idx = np.array(out_shape)
-        in_idx = np.array(in_shape)
-        # walk over output storage
-        for i in range(len(out)):
-            if strides_aligned:
-                in_pos = i
-            else:
-                # get index of current out position
-                to_index(i, out_shape, out_idx)
-                # map to index in input tensor
-                broadcast_index(out_idx, out_shape, in_shape, in_idx)
-                # get input position in storage based on index
-                in_pos = index_to_position(in_idx, in_strides)
-                # apply fn on input storage value at position and write to output storage
-            out[i] = fn(in_storage[in_pos])
+        size = np.prod(out_shape)
+
+        in_idx = [0] * len(in_shape)
+        out_idx = [0] * len(out_shape)
+
+        for idx in range(size):
+            # get index of current out position
+            to_index(idx, out_shape, out_idx)
+            
+            # map to index in input tensor
+            broadcast_index(out_idx, out_shape, in_shape, in_idx)
+            
+            # get input position in storage based on index
+            out_pos = index_to_position(out_idx, out_strides)
+            in_pos = index_to_position(in_idx, in_strides)
+
+            # apply fn on input storage value at position and write to output storage
+            out[out_pos] = fn(in_storage[in_pos])
 
     return _map
 
@@ -148,26 +148,23 @@ def tensor_zip(fn):
         b_shape,
         b_strides,
     ):
-        strides_aligned = (
-            (out_shape == a_shape).all()
-            and (out_shape == b_shape).all()
-            and (out_strides == a_strides).all()
-            and (out_strides == b_strides).all()
-        )
-        out_idx = np.array(out_shape)
-        a_idx = np.array(a_shape)
-        b_idx = np.array(b_shape)
-        for i in range(len(out)):
-            if strides_aligned:
-                a_pos = i
-                b_pos = i
-            else:
-                to_index(i, out_shape, out_idx)
-                broadcast_index(out_idx, out_shape, a_shape, a_idx)
-                broadcast_index(out_idx, out_shape, b_shape, b_idx)
-                a_pos = index_to_position(a_idx, a_strides)
-                b_pos = index_to_position(b_idx, b_strides)
-            out[i] = fn(a_storage[a_pos], b_storage[b_pos])
+        size = np.prod(out_shape)
+
+        a_idx = [0] * len(a_shape)
+        b_idx = [0] * len(b_shape)
+        out_idx = [0] * len(out_shape)
+        
+        for idx in range(size):
+            to_index(idx, out_shape, out_idx)
+            
+            broadcast_index(out_idx, out_shape, a_shape, a_idx)
+            broadcast_index(out_idx, out_shape, b_shape, b_idx)
+            
+            a_pos = index_to_position(a_idx, a_strides)
+            b_pos = index_to_position(b_idx, b_strides)
+            out_pos = index_to_position(out_idx, out_strides)
+
+            out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
 
     return _zip
 
@@ -237,13 +234,24 @@ def tensor_reduce(fn):
     """
 
     def _reduce(out, out_shape, out_strides, a_storage, a_shape, a_strides, reduce_dim):
-        out_idx = np.array(out_shape)
-        for i in range(len(out)):
-            to_index(i, out_shape, out_idx)
+        size = len(out)
+        
+        for idx in range(size):
+            out_idx = [0] * len(out_shape)
+            
+            to_index(idx, out_shape, out_idx)
+
+            a_idx = out_idx.copy()
+            out_pos = index_to_position(out_idx, out_strides)
             for j in range(a_shape[reduce_dim]):
-                out_idx[reduce_dim] = j
-                a_pos = index_to_position(out_idx, a_strides)
-                out[i] = fn(out[i], a_storage[a_pos])
+                a_idx[reduce_dim] = j
+
+                a_pos = index_to_position(a_idx, a_strides)
+
+                if j == 0:
+                    out[out_pos] = a_storage[a_pos]
+                else:
+                    out[out_pos] = fn(out[out_pos], a_storage[a_pos])
 
     return _reduce
 

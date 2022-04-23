@@ -44,19 +44,24 @@ def tensor_map(fn):
 
     @njit(parallel=True)
     def _map(out, out_shape, out_strides, in_storage, in_shape, in_strides):
-        # strides_aligned = (out_shape == in_shape).all() and (
-        #     out_strides == in_strides
-        # ).all()
-        for i in prange(len(out)):
-            # if strides_aligned:
-            #     in_pos = i
-            # else:
-            out_idx = np.copy(out_shape)
-            in_idx = np.copy(in_shape)
-            to_index(i, out_shape, out_idx)
+        size = len(out)
+
+        in_idx = in_shape.copy()
+        out_idx = out_shape.copy()
+
+        for idx in range(size):
+            # get index of current out position
+            to_index(idx, out_shape, out_idx)
+            
+            # map to index in input tensor
             broadcast_index(out_idx, out_shape, in_shape, in_idx)
+            
+            # get input position in storage based on index
+            out_pos = index_to_position(out_idx, out_strides)
             in_pos = index_to_position(in_idx, in_strides)
-            out[i] = fn(in_storage[in_pos])
+
+            # apply fn on input storage value at position and write to output storage
+            out[out_pos] = fn(in_storage[in_pos])
 
     return _map
 
@@ -130,26 +135,23 @@ def tensor_zip(fn):
         b_shape,
         b_strides,
     ):
-        # strides_aligned = (
-        #     (out_shape == a_shape).all()
-        #     and (out_shape == b_shape).all()
-        #     and (out_strides == a_strides).all()
-        #     and (out_strides == b_strides).all()
-        # )
-        for i in prange(len(out)):
-            # if strides_aligned:
-            #     a_pos = i
-            #     b_pos = i
-            # else:
-            out_idx = np.copy(out_shape)
-            a_idx = np.copy(a_shape)
-            b_idx = np.copy(b_shape)
-            to_index(i, out_shape, out_idx)
+        size = len(out)
+
+        a_idx = a_shape.copy()
+        b_idx = b_shape.copy()
+        out_idx = out_shape.copy()
+        
+        for idx in range(size):
+            to_index(idx, out_shape, out_idx)
+            
             broadcast_index(out_idx, out_shape, a_shape, a_idx)
             broadcast_index(out_idx, out_shape, b_shape, b_idx)
+            
             a_pos = index_to_position(a_idx, a_strides)
             b_pos = index_to_position(b_idx, b_strides)
-            out[i] = fn(a_storage[a_pos], b_storage[b_pos])
+            out_pos = index_to_position(out_idx, out_strides)
+
+            out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
 
     return _zip
 
@@ -207,13 +209,25 @@ def tensor_reduce(fn):
 
     @njit(parallel=True)
     def _reduce(out, out_shape, out_strides, a_storage, a_shape, a_strides, reduce_dim):
-        for i in prange(len(out)):
-            out_idx = np.copy(out_shape)
-            to_index(i, out_shape, out_idx)
+        size = len(out)
+        
+        for idx in range(size):
+            out_idx = out_shape.copy()
+            
+            to_index(idx, out_shape, out_idx)
+
+            a_idx = out_idx.copy()
+            out_pos = index_to_position(out_idx, out_strides)
             for j in range(a_shape[reduce_dim]):
-                out_idx[reduce_dim] = j
-                a_pos = index_to_position(out_idx, a_strides)
-                out[i] = fn(out[i], a_storage[a_pos])
+                a_idx[reduce_dim] = j
+
+                a_pos = index_to_position(a_idx, a_strides)
+
+                if j == 0:
+                    out[out_pos] = a_storage[a_pos]
+                else:
+                    out[out_pos] = fn(out[out_pos], a_storage[a_pos])
+
 
     return _reduce
 
@@ -293,19 +307,29 @@ def tensor_matrix_multiply(
     """
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
-    for i in prange(len(out)):
-        out_idx = np.copy(out_shape)
-        to_index(i, out_shape, out_idx)
-        for k in range(a_shape[-1]):
+    
+    size = len(out)
+
+    for idx in prange(size):
+        out_idx = out_shape.copy()
+        
+        to_index(idx, out_shape, out_idx)
+        out_pos = index_to_position(out_idx, out_strides)
+        
+        for k in prange(a_shape[-1]):
+            at_idx = out_idx.copy()
+            bt_idx = out_idx.copy()
+            at_idx[-1] = k
+            bt_idx[-2] = k
+
             a_idx = np.copy(a_shape)
             b_idx = np.copy(b_shape)
-            broadcast_index(out_idx, out_shape, a_shape, a_idx)
-            broadcast_index(out_idx, out_shape, b_shape, b_idx)
-            a_idx[-1] = k
-            b_idx[-2] = k
+            broadcast_index(at_idx, out_shape, a_shape, a_idx)
+            broadcast_index(bt_idx, out_shape, b_shape, b_idx)
+            
             a_pos = index_to_position(a_idx, a_strides)
             b_pos = index_to_position(b_idx, b_strides)
-            out[i] += a_storage[a_pos] * b_storage[b_pos]
+            out[out_pos] += a_storage[a_pos] * b_storage[b_pos]
 
 
 def matrix_multiply(a, b):

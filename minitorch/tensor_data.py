@@ -45,11 +45,10 @@ def to_index(ordinal, shape, out_index):
         None : Fills in `out_index`.
 
     """
-    ordinal_ = ordinal + 0
-    # Iterate over reversed shape
-    for i, s in enumerate(shape[::-1]):
-        out_index[len(shape) - 1 - i] = ordinal_ % s
-        ordinal_ = ordinal_ // s
+    remain = ordinal + 0
+    for i in range(len(shape)-1, -1, -1):
+        out_index[i] = remain % shape[i]
+        remain //= shape[i]
 
 
 def broadcast_index(big_index, big_shape, shape, out_index):
@@ -69,13 +68,11 @@ def broadcast_index(big_index, big_shape, shape, out_index):
     Returns:
         None : Fills in `out_index`.
     """
-    for s_i in range(1, len(big_shape) + 1):
-        if s_i > len(shape):
-            continue
-        if big_shape[-s_i] == shape[-s_i]:
-            out_index[-s_i] = big_index[-s_i]
-        if shape[-s_i] == 1:
-            out_index[-s_i] = 0
+    for i in range(len(shape)):
+        if shape[i] > 1:
+            out_index[i] = big_index[i + (len(big_shape) - len(shape))]
+        else:
+            out_index[i] = 0
 
 
 def shape_broadcast(shape1, shape2):

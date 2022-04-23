@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "module": "pytest",
-            "pythonPath": "/Users/ricomeinl/miniconda3/envs/minitorch/bin/python",
+            "python": "/Users/ricomeinl/miniconda3/envs/minitorch/bin/python",
             "args": [
                 // "-m",
                 // "task2_3"
