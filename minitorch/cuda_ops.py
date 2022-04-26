@@ -42,14 +42,14 @@ def tensor_map(fn):
     """
 
     def _map(out, out_shape, out_strides, out_size, in_storage, in_shape, in_strides):
-        idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-        if idx >= out_size:
-            return
+        in_idx = cuda.local.array(MAX_DIMS, numba.int32)
+        out_idx = cuda.local.array(MAX_DIMS, numba.int32)
 
-        in_idx = cuda.local.array(shape=MAX_DIMS, dtype=numba.int32)
-        out_idx = cuda.local.array(shape=MAX_DIMS, dtype=numba.int32)
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        if i >= out_size:
+            return
         
-        to_index(idx, out_shape, out_idx)
+        to_index(i, out_shape, out_idx)
         broadcast_index(out_idx, out_shape, in_shape, in_idx)
 
         in_pos = index_to_position(in_idx, in_strides)
@@ -113,21 +113,22 @@ def tensor_zip(fn):
         b_shape,
         b_strides,
     ):
-        idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-        if idx >= out_size:
-            return
+        a_idx = cuda.local.array(MAX_DIMS, numba.int32)
+        b_idx = cuda.local.array(MAX_DIMS, numba.int32)
+        out_idx = cuda.local.array(MAX_DIMS, numba.int32)
 
-        a_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
-        b_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
-        out_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        if i >= out_size:
+            return
         
-        to_index(idx, out_shape, out_idx)
-        broadcast_index(out_idx, out_shape, a_shape, a_idx)
-        broadcast_index(out_idx, out_shape, b_shape, b_idx)
-        
-        a_pos = index_to_position(a_idx, a_strides)
-        b_pos = index_to_position(b_idx, b_strides)
+        to_index(i, out_shape, out_idx)
         out_pos = index_to_position(out_idx, out_strides)
+
+        broadcast_index(out_idx, out_shape, a_shape, a_idx)
+        a_pos = index_to_position(a_idx, a_strides)
+
+        broadcast_index(out_idx, out_shape, b_shape, b_idx)
+        b_pos = index_to_position(b_idx, b_strides)
 
         out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
 
@@ -172,18 +173,20 @@ def _sum_practice(out, a, size):
         size (int):  length of a.
 
     """
-    block_mem = cuda.shared.array(shape=THREADS_PER_BLOCK, dtype=numba.float32)
+    BLOCK_DIM = 32
+    block_mem = cuda.shared.array(BLOCK_DIM, numba.float64)
 
-    idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    if idx >= size:
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    if i >= size:
         return
-    block_mem[cuda.threadIdx.x] = a[idx]
+
+    block_mem[cuda.threadIdx.x] = a[i]
 
     cuda.syncthreads()
 
     if cuda.threadIdx.x == 0:
         tmp = cuda.local.array(shape=1, dtype=numba.float32)
-        for i in range(THREADS_PER_BLOCK):
+        for i in range(BLOCK_DIM):
             tmp[0] += block_mem[i]
         out[cuda.blockIdx.x] = tmp[0]
 

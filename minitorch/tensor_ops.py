@@ -41,21 +41,19 @@ def tensor_map(fn):
     """
 
     def _map(out, out_shape, out_strides, in_storage, in_shape, in_strides):
-        size = np.prod(out_shape)
+        in_idx = np.zeros(MAX_DIMS, np.int32)
+        out_idx = np.zeros(MAX_DIMS, np.int32)
 
-        in_idx = [0] * len(in_shape)
-        out_idx = [0] * len(out_shape)
-
-        for idx in range(size):
+        for i in range(len(out)):
             # get index of current out position
-            to_index(idx, out_shape, out_idx)
+            to_index(i, out_shape, out_idx)
             
             # map to index in input tensor
             broadcast_index(out_idx, out_shape, in_shape, in_idx)
             
             # get input position in storage based on index
-            out_pos = index_to_position(out_idx, out_strides)
             in_pos = index_to_position(in_idx, in_strides)
+            out_pos = index_to_position(out_idx, out_strides)
 
             # apply fn on input storage value at position and write to output storage
             out[out_pos] = fn(in_storage[in_pos])
@@ -148,21 +146,19 @@ def tensor_zip(fn):
         b_shape,
         b_strides,
     ):
-        size = np.prod(out_shape)
-
-        a_idx = [0] * len(a_shape)
-        b_idx = [0] * len(b_shape)
-        out_idx = [0] * len(out_shape)
+        a_idx = np.zeros(MAX_DIMS, np.int32)
+        b_idx = np.zeros(MAX_DIMS, np.int32)
+        out_idx = np.zeros(MAX_DIMS, np.int32)
         
-        for idx in range(size):
-            to_index(idx, out_shape, out_idx)
-            
-            broadcast_index(out_idx, out_shape, a_shape, a_idx)
-            broadcast_index(out_idx, out_shape, b_shape, b_idx)
-            
-            a_pos = index_to_position(a_idx, a_strides)
-            b_pos = index_to_position(b_idx, b_strides)
+        for i in range(len(out)):
+            to_index(i, out_shape, out_idx)
             out_pos = index_to_position(out_idx, out_strides)
+
+            broadcast_index(out_idx, out_shape, a_shape, a_idx)
+            a_pos = index_to_position(a_idx, a_strides)
+
+            broadcast_index(out_idx, out_shape, b_shape, b_idx)
+            b_pos = index_to_position(b_idx, b_strides)
 
             out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
 
@@ -234,22 +230,17 @@ def tensor_reduce(fn):
     """
 
     def _reduce(out, out_shape, out_strides, a_storage, a_shape, a_strides, reduce_dim):
-        assert(out_shape[reduce_dim] == 1)
+        out_idx = np.zeros(MAX_DIMS, np.int32)
+        reduce_size = a_shape[reduce_dim]
 
-        size_a = np.prod(a_shape)
+        for i in range(len(out)):
+            to_index(i, out_shape, out_idx)
+            out_pos = index_to_position(out_idx, out_strides)
 
-        a_index = [0] * len(a_shape)
-        for idx in range(size_a):
-            to_index(idx, a_shape, a_index)
+            for j in range(reduce_size):
+                out_idx[reduce_dim] = j
+                a_pos = index_to_position(out_idx, a_strides)
 
-            out_index = a_index.copy()
-            out_index[reduce_dim] = 0
-
-            a_pos = index_to_position(a_index, a_strides)
-            out_pos = index_to_position(out_index, out_strides)
-            if idx == 0:
-                out[out_pos] = a_storage[a_pos]
-            else:
                 out[out_pos] = fn(out[out_pos], a_storage[a_pos])
 
     return _reduce
