@@ -43,7 +43,7 @@ def tensor_map(fn):
 
     def _map(out, out_shape, out_strides, out_size, in_storage, in_shape, in_strides):
         idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-        if idx > out_size:
+        if idx >= out_size:
             return
 
         in_idx = cuda.local.array(shape=MAX_DIMS, dtype=numba.int32)
@@ -114,7 +114,9 @@ def tensor_zip(fn):
         b_strides,
     ):
         idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-       
+        if idx >= out_size:
+            return
+
         a_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
         b_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
         out_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
@@ -170,9 +172,20 @@ def _sum_practice(out, a, size):
         size (int):  length of a.
 
     """
-    BLOCK_DIM = 32
-    # TODO: Implement for Task 3.3.
-    raise NotImplementedError("Need to implement for Task 3.3")
+    block_mem = cuda.shared.array(shape=THREADS_PER_BLOCK, dtype=numba.float32)
+
+    idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    if idx >= size:
+        return
+    block_mem[cuda.threadIdx.x] = a[idx]
+
+    cuda.syncthreads()
+
+    if cuda.threadIdx.x == 0:
+        tmp = cuda.local.array(shape=1, dtype=numba.float32)
+        for i in range(THREADS_PER_BLOCK):
+            tmp[0] += block_mem[i]
+        out[cuda.blockIdx.x] = tmp[0]
 
 
 jit_sum_practice = cuda.jit()(_sum_practice)
@@ -221,8 +234,30 @@ def tensor_reduce(fn):
         reduce_value,
     ):
         BLOCK_DIM = 1024
-        # TODO: Implement for Task 3.3.
-        raise NotImplementedError("Need to implement for Task 3.3")
+
+        block_mem = cuda.shared.array(BLOCK_DIM, dtype=numba.float32)
+        a_idx = cuda.local.array(MAX_DIMS, dtype=numba.int32)
+
+        idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        if idx >= out_size:
+            return
+
+        to_index(idx, a_shape, a_idx)
+        a_pos = index_to_position(a_idx, a_strides)
+
+        block_mem[cuda.threadIdx.x] = a_storage[a_pos]
+
+        cuda.syncthreads()
+
+        if cuda.threadIdx.x == 0:
+            tmp = cuda.local.array(shape=1, dtype=numba.float32)
+            for i in range(BLOCK_DIM):
+                tmp[0] += block_mem[i]
+            
+            out_idx = a_idx
+            out_idx[reduce_dim] = 0
+            out_pos = index_to_position(out_idx, out_strides)
+            out[out_pos] = fn(out[out_pos], tmp[0])
 
     return cuda.jit()(_reduce)
 

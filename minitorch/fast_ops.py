@@ -49,7 +49,7 @@ def tensor_map(fn):
         in_idx = in_shape.copy()
         out_idx = out_shape.copy()
 
-        for idx in range(size):
+        for idx in prange(size):
             # get index of current out position
             to_index(idx, out_shape, out_idx)
             
@@ -141,7 +141,7 @@ def tensor_zip(fn):
         b_idx = b_shape.copy()
         out_idx = out_shape.copy()
         
-        for idx in range(size):
+        for idx in prange(size):
             to_index(idx, out_shape, out_idx)
             
             broadcast_index(out_idx, out_shape, a_shape, a_idx)
@@ -211,14 +211,14 @@ def tensor_reduce(fn):
     def _reduce(out, out_shape, out_strides, a_storage, a_shape, a_strides, reduce_dim):
         size = len(out)
         
-        for idx in range(size):
+        for idx in prange(size):
             out_idx = out_shape.copy()
             
             to_index(idx, out_shape, out_idx)
 
             a_idx = out_idx.copy()
             out_pos = index_to_position(out_idx, out_strides)
-            for j in range(a_shape[reduce_dim]):
+            for j in prange(a_shape[reduce_dim]):
                 a_idx[reduce_dim] = j
 
                 a_pos = index_to_position(a_idx, a_strides)
